@@ -114,5 +114,5 @@ deterministic CI debug signing. For store builds add repo secrets:
 ## APK & phát hành (Release/CI)
 
 Pipeline `.github/workflows/android.yml`: mọi push/PR build bundle tĩnh + job Android; push tag `v*` đính APK vào GitHub Release (prerelease).
-Bản mới nhất: <https://github.com/ungchongvinh123-hub/vain/releases/latest> (`app-release.apk`, ~1.9 MB, cài trực tiếp trên Android 8+).
+Bản mới nhất: <https://github.com/ungchongvinh123-hub/vain/releases> (`app-release.apk`, ~1.9 MB, cài trực tiếp trên Android 8+).
 Artifact 14 ngày mỗi run: `vain-web`, `vain-release.apk`, `mapping-txt`.
