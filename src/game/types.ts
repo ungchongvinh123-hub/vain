@@ -255,7 +255,7 @@ export type CombatEvent =
   | { e: 'block'; uid: string; success: boolean; amount: number }
   | { e: 'qte'; uid: string; kind: QteKind; mastery: number; mult: number }
   | { e: 'foeAct'; uid: string; skillId: string; targets: string[] }
-  | { e: 'battleEnd'; win: boolean; rounds: number };
+  | { e: 'battleEnd'; win: boolean; rounds: number; tiebreak?: boolean };
 
 export interface RngState { s0: number; s1: number; s2: number; s3: number }
 
