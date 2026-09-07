@@ -38,13 +38,20 @@ jobs:
         run: npx tsx scripts/generate-sprites.ts && npm run icons
       - name: Verify data invariants (30 chars · 20 skills each · rates)
         run: npx tsx scripts/test-battle.ts
-      - name: Export fully static offline bundle (IndexedDB data layer, no server)
+      - name: Stash server-only API routes (export must not see them)
+        run: mv src/app/api src/_api_stash
+      - name: next build (static export, offline data layer baked in)
+        env:
+          BUILD_MODE: apk
+          NEXT_PUBLIC_OFFLINE: '1'
+        run: npx next build
+      - name: Restore API routes
+        if: always()
+        run: if [ -d src/_api_stash ]; then mv src/_api_stash src/app/api; fi
+      - name: Verify export output
         run: |
-          set -o pipefail
-          { node scripts/build-apk.mjs ; } 2>&1 | tee build.log || {
-            echo "::error title=Export failed (detail)::$( { tail -c 3000 build.log; echo; pwd; ls -la | head -20; ls -la out 2>&1 | head -5; } | tr '\n' '~' )"
-            exit 1
-          }
+          test -f out/index.html || { echo "::error title=Missing export::out/index.html not produced"; exit 1; }
+          echo "out/ OK ($(find out -type f | wc -l) files)" 
       - uses: actions/upload-artifact@v4
         with:
           name: vain-web
@@ -68,13 +75,18 @@ jobs:
       - uses: android-actions/setup-android@v3
 
       - run: npm ci
-      - name: Build offline web bundle in-job (no cross-job artifact needed)
-        run: |
-          set -o pipefail
-          { npx tsx scripts/generate-sprites.ts && npm run icons && node scripts/build-apk.mjs ; } 2>&1 | tee build.log || {
-            echo "::error title=APK web export failed::$(tail -c 1400 build.log | tr '\n' '~' | sed 's/~/ %0A /g' | head -c 1400)"
-            exit 1
-          }
+      - run: npx tsx scripts/generate-sprites.ts
+      - run: npm run icons
+      - name: Stash server-only API routes
+        run: mv src/app/api src/_api_stash
+      - name: next build (static export)
+        env:
+          BUILD_MODE: apk
+          NEXT_PUBLIC_OFFLINE: '1'
+        run: npx next build
+      - name: Restore API routes
+        if: always()
+        run: if [ -d src/_api_stash ]; then mv src/_api_stash src/app/api; fi
 
       - name: Capacitor project
         run: |
