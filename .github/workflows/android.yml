@@ -11,6 +11,7 @@ on:
         options: [release, debug]
   push:
     branches: [main]
+    tags: ['v*']
     paths-ignore: ['**.md']
   pull_request:
     paths-ignore: ['**.md']
@@ -158,6 +159,13 @@ jobs:
           path: android/app/build/outputs/mapping/release/mapping.txt
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Attach APK to GitHub Release (tag pushes)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/app/build/outputs/apk/*/*/*.apk
+          generate_release_notes: true
 
   quality:
     name: Typecheck / lint / battle sim
