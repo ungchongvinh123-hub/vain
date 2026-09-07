@@ -1,0 +1,194 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      buildType:
+        description: 'APK type'
+        required: true
+        default: release
+        type: choice
+        options: [release, debug]
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore: ['**.md']
+  pull_request:
+    paths-ignore: ['**.md']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  JAVA_VERSION: '17'
+
+jobs:
+  web-bundle:
+    name: Offline web bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Deterministic art + icons
+        run: npx tsx scripts/generate-sprites.ts && npm run icons
+      - name: Verify data invariants (30 chars · 20 skills each · rates)
+        run: npx tsx scripts/test-battle.ts
+      - name: Stash server-only API routes (export must not see them)
+        run: mv src/app/api src/_api_stash
+      - name: next build (static export, offline data layer baked in)
+        env:
+          BUILD_MODE: apk
+          NEXT_PUBLIC_OFFLINE: '1'
+        run: npx next build
+      - name: Restore API routes
+        if: always()
+        run: if [ -d src/_api_stash ]; then mv src/_api_stash src/app/api; fi
+      - name: Verify export output
+        run: |
+          test -f out/index.html || { echo "::error title=Missing export::out/index.html not produced"; exit 1; }
+          echo "out/ OK ($(find out -type f | wc -l) files)" 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vain-web
+          path: out/
+          retention-days: 3
+
+  apk:
+    name: Android ${{ github.event.inputs.buildType || 'release' }}
+    needs: web-bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: android-actions/setup-android@v3
+
+      - run: npm ci
+      - run: npx tsx scripts/generate-sprites.ts
+      - run: npm run icons
+      - name: Stash server-only API routes
+        run: mv src/app/api src/_api_stash
+      - name: next build (static export)
+        env:
+          BUILD_MODE: apk
+          NEXT_PUBLIC_OFFLINE: '1'
+        run: npx next build
+      - name: Restore API routes
+        if: always()
+        run: if [ -d src/_api_stash ]; then mv src/_api_stash src/app/api; fi
+
+      - name: Capacitor project
+        run: |
+          npx cap add android || true
+          npx cap sync android
+          node scripts/android-config.mjs   # landscape lock, fullscreen, release signing hook
+
+      - name: Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          BUILD_TYPE: ${{ github.event.inputs.buildType }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ "$BUILD_TYPE" != "debug" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/release.keystore
+            cat > android/keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+            echo "Using release keystore from secrets."
+          else
+            keytool -genkeypair -v -keystore android/debug.keystore \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=VAIN CI Debug, OU=CI, O=CI, L=NA, S=NA, C=US" >/dev/null 2>&1
+            cat > android/keystore.properties <<EOF
+          storeFile=debug.keystore
+          storePassword=android
+          keyAlias=androiddebugkey
+          keyPassword=android
+          EOF
+            echo "No signing secret (KEYSTORE_BASE64) — APK is debug-signed, installable on any device."
+          fi
+
+      - name: Gradle caches + wrapper perms
+        run: |
+          printf '\norg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8\n' >> android/gradle.properties
+          chmod +x android/gradlew
+
+      - name: Assemble
+        run: |
+          set -o pipefail
+          cd android
+          if [ "${{ github.event.inputs.buildType }}" = "debug" ]; then TASK=assembleDebug; else TASK=assembleRelease; fi
+          { ./gradlew $TASK --no-daemon --stacktrace 2>&1 | tee ../gradle.log ; } || {
+            echo "::error title=Gradle failed::$(tail -c 3500 ../gradle.log | tr '\n' '~')"
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vain-debug.apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: ignore
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vain-release.apk
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: ignore
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mapping-txt
+          path: android/app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Attach APK to GitHub Release (tag pushes)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/app/build/outputs/apk/**/*.apk
+          prerelease: true
+          make_latest: true
+          tag_name: ${{ github.ref_name }}
+          name: VAIN ${{ github.ref_name }}
+          body: |
+            Bản cài đặt Android (debug-keystore signed, landscape, offline hoàn toàn sau lần mở đầu).
+            Cài: mở file .apk trên điện thoại → cho phép "Install unknown apps".
+            Web bundle tĩnh kèm artifact `vain-web` của run này.
+
+  quality:
+    name: Typecheck / lint / battle sim
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx tsx scripts/generate-sprites.ts
+      - run: npm run build:web   # also generates next-env.d.ts + .next/types for tsc
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npx tsx scripts/test-battle.ts
