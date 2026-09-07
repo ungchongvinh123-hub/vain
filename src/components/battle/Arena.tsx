@@ -1,10 +1,11 @@
 'use client';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Fragment } from 'react';
+import { Fragment, memo } from 'react';
 import { Sprite, MagicCircle } from '../Sprite';
 import { ElementBadge, Icon } from '../Icon';
 import { Bar } from '../ui';
 import type { FloatNumber, UnitView } from './types';
+import { sameFloatNumbers, sameUnitView } from './types';
 import type { StatusKind } from '../../game/types';
 import { ELEMENT_COLORS } from '../Icon';
 
@@ -181,6 +182,47 @@ export function ArenaUnit({
   );
 }
 
+interface ArenaSlotProps {
+  unit: UnitView;
+  side: 'party' | 'foe';
+  isActive: boolean;
+  isTargetable: boolean;
+  isSelected: boolean;
+  isThreatened: boolean;
+  /** hidden while the clash overlay has taken over this fighter */
+  ghost: boolean;
+  numbers?: FloatNumber[];
+  onPickTarget: (uid: string) => void;
+}
+
+/**
+ * One position on the field. Memoised so a strike / status tick / pose change
+ * that touches ONE unit only re-renders that unit's row: its sprite subtree,
+ * MagicCircle, hitbox, HUD and mana pips — not all ~10 units (each of them a
+ * ~117-node rigged SVG) on every sync of a battle.
+ */
+const ArenaSlot = memo(function ArenaSlot(p: ArenaSlotProps) {
+  return (
+    <div className="transition-opacity duration-200" style={{ opacity: p.ghost ? 0.12 : 1 }}>
+      <ArenaUnit
+        unit={p.unit}
+        side={p.side}
+        isActive={p.isActive}
+        isTargetable={p.isTargetable}
+        isSelected={p.isSelected}
+        isThreatened={p.isThreatened}
+        onClick={() => p.onPickTarget(p.unit.uid)}
+        numbers={p.numbers}
+      />
+    </div>
+  );
+}, (a: ArenaSlotProps, b: ArenaSlotProps) =>
+  a.ghost === b.ghost && a.isActive === b.isActive && a.isTargetable === b.isTargetable
+  && a.isSelected === b.isSelected && a.isThreatened === b.isThreatened
+  && a.onPickTarget === b.onPickTarget
+  && sameUnitView(a.unit, b.unit)
+  && sameFloatNumbers(a.numbers, b.numbers));
+
 export function Arena({
   units, activeUid, phase, targetMode, pickedTarget, threatened, onPickTarget, numbersByUid, hiddenUids,
 }: {
@@ -199,27 +241,24 @@ export function Arena({
   const foes = units.filter((u) => u.side === 'foe').sort((a, b) => a.slot - b.slot);
   const row = (list: UnitView[], side: 'party' | 'foe') => (
     <div className={`flex h-full items-end gap-1 ${side === 'party' ? 'justify-start pl-2' : 'justify-end pr-2'}`}>
-      {list.map((u) => {
+      {list.map((u) => (
         // Ghost the fighters that the clash overlay has taken over. Opacity only:
         // `filter: blur(3px)` on up to 8 complex SVGs at once (animated through
         // `transition-[filter]`) made the compositor re-raster all of them every
         // frame for the whole 200 ms — the single heaviest moment of a battle.
-        const ghost = hiddenUids?.has(u.uid) ?? false;
-        return (
-          <div key={u.uid} className="transition-opacity duration-200" style={{ opacity: ghost ? 0.12 : 1 }}>
-            <ArenaUnit
-              unit={u}
-              side={side}
-              isActive={activeUid === u.uid}
-              isTargetable={targetMode && u.side !== 'party' && u.alive}
-              isSelected={pickedTarget === u.uid}
-              isThreatened={threatened.includes(u.uid)}
-              onClick={() => onPickTarget(u.uid)}
-              numbers={numbersByUid[u.uid]}
-            />
-          </div>
-        );
-      })}
+        <ArenaSlot
+          key={u.uid}
+          unit={u}
+          side={side}
+          isActive={activeUid === u.uid}
+          isTargetable={targetMode && u.side !== 'party' && u.alive}
+          isSelected={pickedTarget === u.uid}
+          isThreatened={threatened.includes(u.uid)}
+          ghost={hiddenUids?.has(u.uid) ?? false}
+          numbers={numbersByUid[u.uid]}
+          onPickTarget={onPickTarget}
+        />
+      ))}
     </div>
   );
   return (

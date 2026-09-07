@@ -8,6 +8,7 @@ import {
 import type { ClientActionEntry } from './api';
 import { audio } from '../../game/audio/synth';
 import type { BattleConfigView, FloatNumber, FlowPhase, Pose, QtePromptView, UnitView } from './types';
+import { sameUnitView } from './types';
 import type { SkillRuntime } from '../../game/types';
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -89,7 +90,19 @@ export function useBattleFlow(config: BattleConfigView | null) {
     rarity: u.rarity,
   });
 
-  const syncUnits = (st: BattleState) => setUnits(st.units.map(toSeedView));
+  /**
+   * Push engine state to React — DIFFED. Before round 2 every call mapped all
+   * units to brand-new objects and setUnits() them, so every sync (several per
+   * action: pose set, clash open, clash close…) re-rendered the whole Arena and
+   * every unit row, even when the engine had not changed anything the UI shows.
+   * Now a sync that produces no visible change returns the SAME state array and
+   * React bails out entirely; the memoised rows in <Arena> take care of only
+   * re-rendering the unit(s) that actually changed.
+   */
+  const syncUnits = (st: BattleState) => {
+    const fresh = st.units.map(toSeedView);
+    setUnits((prev) => (prev.length === fresh.length && fresh.every((v, i) => sameUnitView(prev[i], v)) ? prev : fresh));
+  };
 
   const setPose = (st: BattleState, uidKey: string, pose: Pose) => {
     const u = st.units.find((x) => x.uid === uidKey);
