@@ -11,6 +11,7 @@ import { isOfflineBuild } from '../game/offline/localApi';
 export function AppProviders({ children }: { children: ReactNode }) {
   const boot = useGame((s) => s.boot);
   const ready = useGame((s) => s.ready);
+  const bootError = useGame((s) => s.error);
   const musicOn = useGame((s) => s.audio.music);
   const muted = useGame((s) => s.audio.muted);
   const [unlocked, setUnlocked] = useState(false);
@@ -47,13 +48,29 @@ export function AppProviders({ children }: { children: ReactNode }) {
         <TopBar />
         <main className="relative flex-1 overflow-hidden">
           {!ready ? (
-            <div className="flex h-full flex-col items-center justify-center gap-4">
-              <div className="font-display text-4xl tracking-[.4em] text-gild title-grad">VAIN</div>
-              <div className="text-[11px] uppercase tracking-[.34em] text-white/45">đang mở cánh cổng…</div>
-              <div className="h-1 w-64 overflow-hidden rounded bg-white/10">
-                <div className="h-full w-1/3 animate-[shimmer_1.1s_linear_infinite] bg-gild" />
+            bootError ? (
+              <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+                <div className="font-display text-4xl tracking-[.4em] text-gild title-grad">VAIN</div>
+                <div className="max-w-md text-sm leading-relaxed text-white/70">
+                  Không mở được kho lưu trữ trên thiết bị này
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void boot()}
+                  className="rounded-lg border border-gild/60 bg-gild/10 px-6 py-2 text-sm font-semibold uppercase tracking-[.2em] text-gild transition-colors hover:bg-gild/20 active:scale-95"
+                >
+                  Thử lại
+                </button>
               </div>
-            </div>
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-4">
+                <div className="font-display text-4xl tracking-[.4em] text-gild title-grad">VAIN</div>
+                <div className="text-[11px] uppercase tracking-[.34em] text-white/45">đang mở cánh cổng…</div>
+                <div className="h-1 w-64 overflow-hidden rounded bg-white/10">
+                  <div className="h-full w-1/3 animate-[shimmer_1.1s_linear_infinite] bg-gild" />
+                </div>
+              </div>
+            )
           ) : (
             <>
               {children}

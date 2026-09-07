@@ -48,35 +48,81 @@ interface OffSave {
   updatedAt: number;
 }
 
-let dbp: Promise<IDBDatabase> | null = null;
-function db(): Promise<IDBDatabase> {
+/**
+ * Two-tier persistence:
+ *   1. IndexedDB is the primary store, and every save is ALSO mirrored to
+ *      localStorage (`vain-offline:saves:<saveKey>`) so a copy always exists.
+ *   2. Some Android WebViews refuse to open IndexedDB (missing, blocked, or
+ *      throwing on open/transaction). The first failure flips `idbBroken`
+ *      PERMANENTLY for the session and we fall back to pure localStorage.
+ * Nothing in this block is ever allowed to throw — a dead storage layer must
+ * degrade gracefully, never white-screen the app.
+ */
+const LS_PREFIX = 'vain-offline:saves:';
+
+let idbBroken = false;
+
+function lsRead(key: string): OffSave | null {
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as OffSave | null;
+    return parsed && typeof parsed === 'object' && typeof parsed.saveKey === 'string' ? parsed : null;
+  } catch { return null; }
+}
+
+function lsWrite(s: OffSave): void {
+  try { localStorage.setItem(LS_PREFIX + s.saveKey, JSON.stringify(s)); } catch { /* quota/private-mode: mirror is best-effort */ }
+}
+
+let dbp: Promise<IDBDatabase | null> | null = null;
+function db(): Promise<IDBDatabase | null> {
+  if (idbBroken) return Promise.resolve(null);
   if (dbp) return dbp;
-  dbp = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+  dbp = new Promise((resolve) => {
+    try {
+      if (typeof indexedDB === 'undefined' || !indexedDB) { idbBroken = true; resolve(null); return; }
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onblocked = () => { idbBroken = true; resolve(null); };
+      req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => { idbBroken = true; resolve(null); };
+    } catch { idbBroken = true; resolve(null); }
   });
   return dbp;
 }
 
 async function readSave(key: string): Promise<OffSave | null> {
-  const d = await db();
-  return new Promise((resolve, reject) => {
-    const tx = d.transaction(STORE, 'readonly').objectStore(STORE).get(key);
-    tx.onsuccess = () => resolve((tx.result as OffSave) ?? null);
-    tx.onerror = () => reject(tx.error);
-  });
+  if (!idbBroken) {
+    try {
+      const d = await db();
+      if (d) {
+        const found = await new Promise<OffSave | null>((resolve, reject) => {
+          const tx = d.transaction(STORE, 'readonly').objectStore(STORE).get(key);
+          tx.onsuccess = () => resolve((tx.result as OffSave) ?? null);
+          tx.onerror = () => reject(tx.error);
+        });
+        if (found) return found;
+      }
+    } catch { idbBroken = true; }
+  }
+  return lsRead(key); // empty or IndexedDB unusable → localStorage mirror
 }
 
 async function writeSave(s: OffSave): Promise<void> {
-  const d = await db();
-  await new Promise<void>((resolve, reject) => {
-    const tx = d.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put(s, s.saveKey);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  lsWrite(s); // mirror ALWAYS written first, never throws
+  if (idbBroken) return;
+  try {
+    const d = await db();
+    if (!d) return; // db() already flagged idbBroken
+    await new Promise<void>((resolve, reject) => {
+      const tx = d.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(s, s.saveKey);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error('idb-abort'));
+    });
+  } catch { idbBroken = true; }
 }
 
 export const SAVE_COOKIE_KEY = 'vain_save_key';

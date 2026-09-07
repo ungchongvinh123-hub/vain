@@ -53,7 +53,9 @@ export const useGame = create<GameState>((set, get) => ({
       if (!res.ok || !j.ok) throw new Error(j?.error ?? 'load-failed');
       set({ snapshot: j.data.snapshot as PlayerSnapshot, dbOnline: (j.data.db as { ok: boolean }).ok, ready: true, busy: false });
     } catch (e) {
-      set({ ready: true, dbOnline: false, error: e instanceof Error ? e.message : String(e), busy: false });
+      // Keep ready FALSE: opening the UI with a null snapshot crashes every
+      // page that reads snapshot! — show the retry screen instead.
+      set({ ready: false, dbOnline: false, error: e instanceof Error ? e.message : String(e), busy: false });
     }
     void prefs;
   },
