@@ -39,7 +39,14 @@ jobs:
       - name: Verify data invariants (30 chars · 20 skills each · rates)
         run: npx tsx scripts/test-battle.ts
       - name: Export fully static offline bundle (IndexedDB data layer, no server)
-        run: npm run build:apk-web
+        run: |
+          node scripts/build-apk.mjs || {
+            echo "::error::apk export failed — rerunning next build directly for logs"
+            mv src/app/api src/_api_stash
+            BUILD_MODE=apk NEXT_PUBLIC_OFFLINE=1 npx next build; rc=$?
+            mv src/_api_stash src/app/api
+            exit $rc
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: vain-web
@@ -92,11 +99,10 @@ jobs:
           EOF
             echo "Using release keystore from secrets."
           else
-            keytool -genkeypair -v -keystore android/keystore.properties.keystore \
+            keytool -genkeypair -v -keystore android/debug.keystore \
               -storepass android -keypass android -alias androiddebugkey \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=VAIN CI Debug, OU=CI, O=CI, L=NA, S=NA, C=US" >/dev/null 2>&1
-            mv android/keystore.properties.keystore android/debug.keystore
             cat > android/keystore.properties <<EOF
           storeFile=debug.keystore
           storePassword=android
@@ -150,7 +156,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx tsx scripts/generate-sprites.ts
+      - run: npm run build:web   # also generates next-env.d.ts + .next/types for tsc
       - run: npm run typecheck
       - run: npm run lint
       - run: npx tsx scripts/test-battle.ts
-      - run: npm run build:web

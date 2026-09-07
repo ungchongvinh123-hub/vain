@@ -17,12 +17,14 @@ const stash = resolve(root, 'src/_api_stash');
 if (existsSync(apiDir)) renameSync(apiDir, stash);
 let failed = false;
 try {
-  const r = spawnSync('npx', ['next', 'build'], {
+  const bin = resolve(root, 'node_modules', 'next', 'dist', 'bin', 'next');
+  const r = spawnSync(process.execPath, [bin, 'build'], {
     cwd: root,
     stdio: 'inherit',
     env: { ...process.env, BUILD_MODE: 'apk', NEXT_PUBLIC_OFFLINE: '1', NODE_ENV: 'production' },
   });
-  failed = r.status !== 0;
+  if (r.error) { console.error('[build-apk] spawn failed:', r.error.message); failed = true; }
+  else failed = r.status !== 0;
 } finally {
   if (existsSync(stash)) renameSync(stash, apiDir);
 }
