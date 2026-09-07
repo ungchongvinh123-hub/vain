@@ -11,7 +11,21 @@
   overflow: visible;
 }
 .sprite svg { width: 100%; height: auto; overflow: visible; display: block; }
-.sprite svg [class^="rig-"], .sprite svg [data-part] { transform-box: fill-box; will-change: transform, opacity; }
+.sprite svg [class^="rig-"], .sprite svg [data-part] { transform-box: fill-box; }
+
+/*
+ * `will-change` used to sit on EVERY rig node of EVERY sprite (~11.6 per sprite
+ * → 116 promoted compositing layers in a 10-unit battle), which exhausts the
+ * WebView's texture budget and drags the whole screen down to software raster.
+ * Promote only the two or three nodes that actually move hard, and only for the
+ * ~0.5 s window of an action pose.
+ */
+.sprite[data-pose="attack"] .rig-root,
+.sprite[data-pose="attack"] .rig-armR,
+.sprite[data-pose="attack"] .rig-torso,
+.sprite[data-pose="skill"] .rig-root,
+.sprite[data-pose="skill"] .rig-armR,
+.sprite[data-pose="hit"] .rig-root { will-change: transform; }
 
 /* ------------------------------- idle ------------------------------- */
 .sprite[data-pose="idle"] .rig-root { animation: spr-breathe 3.6s ease-in-out infinite; transform-origin: 50% 100%; }

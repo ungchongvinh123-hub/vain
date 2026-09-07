@@ -43,10 +43,14 @@ export function ClashView({
         <div className="absolute bottom-[6%] left-1/2 -translate-x-1/2">
           <MagicCircle element={u.element} size={420} active opacity={0.9} />
         </div>
+        {/* ground shadow — painted gradient instead of a `drop-shadow(0 24px 40px)`
+            on a 690px-tall sprite, which re-rastered the entire SVG on every
+            frame of the spring entrance */}
         <div
-          className="absolute inset-x-0 bottom-[8%] flex justify-center"
-          style={{ filter: `drop-shadow(0 24px 40px rgba(0,0,0,.85))` }}
-        >
+          className="pointer-events-none absolute bottom-[6%] left-1/2 h-16 w-[62%] -translate-x-1/2 rounded-[50%]"
+          style={{ background: 'radial-gradient(closest-side, rgba(0,0,0,.85), transparent)' }}
+        />
+        <div className="absolute inset-x-0 bottom-[8%] flex justify-center">
           <Sprite
             defId={u.sprite}
             pose={pose}

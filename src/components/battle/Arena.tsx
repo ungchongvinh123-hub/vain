@@ -199,23 +199,27 @@ export function Arena({
   const foes = units.filter((u) => u.side === 'foe').sort((a, b) => a.slot - b.slot);
   const row = (list: UnitView[], side: 'party' | 'foe') => (
     <div className={`flex h-full items-end gap-1 ${side === 'party' ? 'justify-start pl-2' : 'justify-end pr-2'}`}>
-      {list.map((u) => (
-        <div key={u.uid} className="transition-[filter,opacity] duration-200" style={{
-          filter: hiddenUids?.has(u.uid) ? 'blur(3px) brightness(.25)' : undefined,
-          opacity: hiddenUids?.has(u.uid) ? 0.15 : 1,
-        }}>
-          <ArenaUnit
-            unit={u}
-            side={side}
-            isActive={activeUid === u.uid}
-            isTargetable={targetMode && u.side !== 'party' && u.alive}
-            isSelected={pickedTarget === u.uid}
-            isThreatened={threatened.includes(u.uid)}
-            onClick={() => onPickTarget(u.uid)}
-            numbers={numbersByUid[u.uid]}
-          />
-        </div>
-      ))}
+      {list.map((u) => {
+        // Ghost the fighters that the clash overlay has taken over. Opacity only:
+        // `filter: blur(3px)` on up to 8 complex SVGs at once (animated through
+        // `transition-[filter]`) made the compositor re-raster all of them every
+        // frame for the whole 200 ms — the single heaviest moment of a battle.
+        const ghost = hiddenUids?.has(u.uid) ?? false;
+        return (
+          <div key={u.uid} className="transition-opacity duration-200" style={{ opacity: ghost ? 0.12 : 1 }}>
+            <ArenaUnit
+              unit={u}
+              side={side}
+              isActive={activeUid === u.uid}
+              isTargetable={targetMode && u.side !== 'party' && u.alive}
+              isSelected={pickedTarget === u.uid}
+              isThreatened={threatened.includes(u.uid)}
+              onClick={() => onPickTarget(u.uid)}
+              numbers={numbersByUid[u.uid]}
+            />
+          </div>
+        );
+      })}
     </div>
   );
   return (

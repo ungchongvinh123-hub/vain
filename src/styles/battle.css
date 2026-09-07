@@ -1,10 +1,12 @@
 /* ------------------------------- battle fx ------------------------------- */
 
 .clash-veil {
+  /* no backdrop-filter: blurring the full 1600×900 stage behind the overlay is
+     the most expensive thing on screen during a clash. A slightly denser
+     gradient hides the arena just as well for ~0 GPU cost. */
   background:
-    radial-gradient(120% 90% at 50% 45%, rgba(0,0,0,.15) 0%, rgba(0,0,0,.86) 70%),
-    linear-gradient(180deg, rgba(5,4,10,.7), rgba(5,4,10,.95));
-  backdrop-filter: blur(2px);
+    radial-gradient(120% 90% at 50% 45%, rgba(0,0,0,.3) 0%, rgba(0,0,0,.94) 70%),
+    linear-gradient(180deg, rgba(5,4,10,.86), rgba(5,4,10,.98));
 }
 
 .fx-floor {
@@ -28,6 +30,9 @@
   mask-image: radial-gradient(60% 60% at 50% 50%, transparent 18%, #000 70%);
   animation: streak .42s linear 1 both;
   opacity: .55;
+  /* paint the repeating gradient + mask ONCE into its own layer, then only
+     translate it — otherwise the mask is recomputed on every frame */
+  will-change: transform;
 }
 @keyframes streak { from { transform: translateX(8%) } to { transform: translateX(-8%) } }
 
