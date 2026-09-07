@@ -169,7 +169,18 @@ export function advanceToNextTurn(st: BattleState): void {
       endOfRound(st);
       if (st.result) { st.phase = 'over'; return; }
       st.round += 1;
-      if (st.round > st.maxRounds) { st.result = 'lose'; push(st, { e: 'battleEnd', win: false, rounds: st.round }); return; }
+      if (st.round > st.maxRounds) {
+        // timeout: whoever holds more of its starting HP wins — the boss can never win by stalling
+        const rel = (side: 'party' | 'foe') => {
+          const us = st.units.filter((x) => x.side === side);
+          const mx = us.reduce((a, b) => a + Math.max(1, b.base.hpMax), 0);
+          return us.reduce((a, b) => a + Math.max(0, b.hp), 0) / mx;
+        };
+        const win = rel('party') >= rel('foe');
+        st.result = win ? 'win' : 'lose';
+        push(st, { e: 'battleEnd', win, rounds: st.round, tiebreak: true });
+        return;
+      }
       push(st, { e: 'roundStart', round: st.round });
       rebuildQueue(st);
       st.qi = 0;

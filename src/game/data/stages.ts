@@ -31,7 +31,7 @@ const RAW: S[] = [
   { id: 7, name: 'Hồ Băng Khóc', region: 2, desc: 'Nữ hồn dưới hồ hát lại tên những người đã chết đuối.', monsters: [['m_banshee', 12], ['m_banshee', 11], ['m_wardog', 12], ['m_aspis', 11]] },
   { id: 8, name: 'Thành Trú Phản nghịch', region: 2, boss: true, desc: 'Hắc Kỵ Sĩ không mặt — và không biết lùi.', monsters: [['m_boss_knight', 14], ['m_golem', 13], ['m_harpy', 13], ['m_wardog', 12]] },
   { id: 9, name: 'Vực Thẳm Cắn Nứt', region: 3, desc: 'Vực thẳm thở ra. Tránh đứng gần mép.', monsters: [['m_drake', 17], ['m_archangel', 16], ['m_lich', 16], ['m_ifrit', 17], ['m_thundertitan', 16]] },
-  { id: 10, name: 'Ngai Vàng Ma Vương', region: 3, boss: true, desc: 'Trận cuối. Azgharoth đã chờ 300 năm cho đúng ngày này.', monsters: [['m_boss_demonking', 20], ['m_ifrit', 19], ['m_lich', 19], ['m_drake', 20], ['m_archangel', 19]] },
+  { id: 10, name: 'Ngai Vàng Ma Vương', region: 3, boss: true, desc: 'Trận cuối. Azgharoth đã chờ 300 năm cho đúng ngày này.', monsters: [['m_boss_demonking', 20], ['m_ifrit', 19], ['m_lich', 18], ['m_drake', 19]] },
 ];
 
 export const STAGES: StageDef[] = RAW.map((s) => {
