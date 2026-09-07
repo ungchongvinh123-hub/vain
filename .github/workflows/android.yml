@@ -70,12 +70,11 @@ jobs:
       - uses: android-actions/setup-android@v3
 
       - run: npm ci
-      - uses: actions/download-artifact@v4
-        with:
-          name: vain-web
-          path: out/
-          run-id: ${{ github.run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build offline web bundle in-job (no cross-job artifact needed)
+        run: |
+          npx tsx scripts/generate-sprites.ts
+          npm run icons
+          node scripts/build-apk.mjs
 
       - name: Capacitor project
         run: |
