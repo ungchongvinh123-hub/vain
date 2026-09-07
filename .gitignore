@@ -36,3 +36,4 @@ next-env.d.ts
 
 # generated sprite payload cache is committed (game art), keep it
 !/public/**
+.next-apk/

@@ -132,12 +132,13 @@ jobs:
 
       - name: Assemble
         run: |
+          set -o pipefail
           cd android
-          if [ "${{ github.event.inputs.buildType }}" = "debug" ]; then
-            ./gradlew assembleDebug --no-daemon
-          else
-            ./gradlew assembleRelease --no-daemon
-          fi
+          if [ "${{ github.event.inputs.buildType }}" = "debug" ]; then TASK=assembleDebug; else TASK=assembleRelease; fi
+          { ./gradlew $TASK --no-daemon --stacktrace 2>&1 | tee ../gradle.log ; } || {
+            echo "::error title=Gradle failed::$(tail -c 3500 ../gradle.log | tr '\n' '~')"
+            exit 1
+          }
 
       - uses: actions/upload-artifact@v4
         with:
