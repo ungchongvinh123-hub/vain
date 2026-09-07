@@ -74,6 +74,8 @@ jobs:
         with:
           name: vain-web
           path: out/
+          run-id: ${{ github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Capacitor project
         run: |
