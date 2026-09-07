@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: 'Cinzel', 'Times New Roman', serif;
+  --font-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: dark;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #05040a;
+  color: #e8e4f2;
+  font-family: var(--font-ui);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+* { -webkit-touch-callout: none; }
+button { font: inherit; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+.thin-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.thin-scroll::-webkit-scrollbar-thumb { background: #4a3674; border-radius: 8px; }
+.thin-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------------------------------- text --------------------------------- */
+.title-grad {
+  background: linear-gradient(180deg, #fff6dd 0%, #f5c453 55%, #b8862b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.stroke-text { -webkit-text-stroke: 1px rgba(0, 0, 0, .55); paint-order: stroke fill; }
+
+.rarity-SSR { --rc: #f5c453; }
+.rarity-SR { --rc: #c084fc; }
+.rarity-R { --rc: #7dd3fc; }
+
+.el-fire { --ec: #ff6b3d; } .el-ice { --ec: #63d2ff; } .el-thunder { --ec: #ffd93d; }
+.el-nature { --ec: #7ee081; } .el-holy { --ec: #ffe9a8; } .el-dark { --ec: #a855f7; }
+.el-neutral { --ec: #c9c6d6; }
+
+.shine::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .28) 45%, transparent 60%);
+  background-size: 250% 100%;
+  animation: shimmer 2.6s linear infinite;
+  pointer-events: none;
+}
+
+.tap-scale { transition: transform .08s ease; }
+.tap-scale:active { transform: scale(.94); }
+
+.gold-line { background: linear-gradient(90deg, transparent, rgba(245, 196, 83, .55), transparent); height: 1px; }
+
+/* diagonal hatching for disabled frames */
+.hatch {
+  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, .05) 0 6px, transparent 6px 12px);
+}

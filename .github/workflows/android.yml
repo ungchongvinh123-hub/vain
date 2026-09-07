@@ -1,0 +1,156 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      buildType:
+        description: 'APK type'
+        required: true
+        default: release
+        type: choice
+        options: [release, debug]
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  pull_request:
+    paths-ignore: ['**.md']
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  JAVA_VERSION: '17'
+
+jobs:
+  web-bundle:
+    name: Offline web bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Deterministic art + icons
+        run: npx tsx scripts/generate-sprites.ts && npm run icons
+      - name: Verify data invariants (30 chars · 20 skills each · rates)
+        run: npx tsx scripts/test-battle.ts
+      - name: Export fully static offline bundle (IndexedDB data layer, no server)
+        run: npm run build:apk-web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vain-web
+          path: out/
+          retention-days: 3
+
+  apk:
+    name: Android ${{ github.event.inputs.buildType || 'release' }}
+    needs: web-bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: android-actions/setup-android@v3
+
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: vain-web
+          path: out/
+
+      - name: Capacitor project
+        run: |
+          npx cap add android || true
+          npx cap sync android
+          node scripts/android-config.mjs   # landscape lock, fullscreen, release signing hook
+
+      - name: Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          BUILD_TYPE: ${{ github.event.inputs.buildType }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ "$BUILD_TYPE" != "debug" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/release.keystore
+            cat > android/keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+            echo "Using release keystore from secrets."
+          else
+            keytool -genkeypair -v -keystore android/keystore.properties.keystore \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=VAIN CI Debug, OU=CI, O=CI, L=NA, S=NA, C=US" >/dev/null 2>&1
+            mv android/keystore.properties.keystore android/debug.keystore
+            cat > android/keystore.properties <<EOF
+          storeFile=debug.keystore
+          storePassword=android
+          keyAlias=androiddebugkey
+          keyPassword=android
+          EOF
+            echo "No signing secret (KEYSTORE_BASE64) — APK is debug-signed, installable on any device."
+          fi
+
+      - name: Gradle caches + wrapper perms
+        run: |
+          printf '\norg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8\n' >> android/gradle.properties
+          chmod +x android/gradlew
+
+      - name: Assemble
+        run: |
+          cd android
+          if [ "${{ github.event.inputs.buildType }}" = "debug" ]; then
+            ./gradlew assembleDebug --no-daemon
+          else
+            ./gradlew assembleRelease --no-daemon
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vain-debug.apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: ignore
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vain-release.apk
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: ignore
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mapping-txt
+          path: android/app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+  quality:
+    name: Typecheck / lint / battle sim
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx tsx scripts/generate-sprites.ts
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npx tsx scripts/test-battle.ts
+      - run: npm run build:web
