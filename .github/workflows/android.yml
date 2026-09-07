@@ -16,6 +16,9 @@ on:
   pull_request:
     paths-ignore: ['**.md']
 
+permissions:
+  contents: write
+
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
@@ -167,7 +170,12 @@ jobs:
           files: android/app/build/outputs/apk/**/*.apk
           prerelease: true
           make_latest: true
-          generate_release_notes: true
+          tag_name: ${{ github.ref_name }}
+          name: VAIN ${{ github.ref_name }}
+          body: |
+            Bản cài đặt Android (debug-keystore signed, landscape, offline hoàn toàn sau lần mở đầu).
+            Cài: mở file .apk trên điện thoại → cho phép "Install unknown apps".
+            Web bundle tĩnh kèm artifact `vain-web` của run này.
 
   quality:
     name: Typecheck / lint / battle sim
