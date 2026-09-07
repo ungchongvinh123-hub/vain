@@ -42,7 +42,7 @@ jobs:
         run: |
           set -o pipefail
           { node scripts/build-apk.mjs ; } 2>&1 | tee build.log || {
-            echo "::error title=APK web export failed::$(tail -c 1400 build.log | tr '\n' '~' | sed 's/~/ %0A /g' | head -c 1400)"
+            echo "::error title=Export failed (detail)::$( { tail -c 3000 build.log; echo; pwd; ls -la | head -20; ls -la out 2>&1 | head -5; } | tr '\n' '~' )"
             exit 1
           }
       - uses: actions/upload-artifact@v4

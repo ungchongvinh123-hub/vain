@@ -30,6 +30,13 @@ try {
 }
 if (failed) { console.error('[build-apk] export failed'); process.exit(1); }
 
-// mark the bundle so the WebView shows nothing but the game
-writeFileSync(resolve(root, 'out/.gitkeep'), 'static export — capacitor webDir\n');
+// mark the bundle so tooling sees webDir even when empty (best-effort)
+try {
+  mkdirSync(resolve(root, 'out'), { recursive: true });
+  writeFileSync(resolve(root, 'out/.gitkeep'), 'static export — capacitor webDir\n');
+} catch (e) { console.warn('[build-apk] .gitkeep skipped:', e.message); }
+if (!existsSync(resolve(root, 'out', 'index.html'))) {
+  console.error('[build-apk] FATAL: out/index.html missing after export');
+  process.exit(1);
+}
 console.log('[build-apk] out/ ready (offline bundle, NEXT_PUBLIC_OFFLINE baked in)');
