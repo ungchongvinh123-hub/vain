@@ -1,26 +1,56 @@
 'use client';
-import { memo, useEffect, useRef } from 'react';
+import { memo, useEffect, useRef, type CSSProperties } from 'react';
 import { SPRITES } from '../game/sprite/generated';
 import type { SpriteState } from '../game/types';
 import { ELEMENT_COLORS } from './Icon';
 import type { Element } from '../game/types';
 
-/**
- * Full-body standing sprite rendered from the procedurally generated rig.
- * Pose animation is CSS-driven (src/styles/sprite.css), so `pose` changes are cheap.
- */
-export const Sprite = memo(function Sprite({
-  defId, pose = 'idle', flip, glow, className, style, poseKey = 0,
-}: {
+interface SpriteProps {
   defId: string;
   pose?: SpriteState;
   flip?: boolean;
   glow?: string;
   className?: string;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
   /** bump to restart a one-shot animation for the same pose */
   poseKey?: number | string;
-}) {
+}
+
+/** compare two CSSProperties objects by VALUE, not reference */
+function styleEqual(a?: CSSProperties, b?: CSSProperties): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) {
+    if (!(k in b)) return false;
+    if ((a as Record<string, unknown>)[k] !== (b as Record<string, unknown>)[k]) return false;
+  }
+  return true;
+}
+
+function spriteEqual(a: SpriteProps, b: SpriteProps): boolean {
+  return a.defId === b.defId && a.pose === b.pose && a.flip === b.flip && a.glow === b.glow
+    && a.className === b.className && a.poseKey === b.poseKey && styleEqual(a.style, b.style);
+}
+
+/**
+ * Full-body standing sprite rendered from the procedurally generated rig.
+ * Pose animation is CSS-driven (src/styles/sprite.css), so `pose` changes are cheap.
+ *
+ * The memo used to run the DEFAULT shallow comparator — but every caller builds
+ * its `style={{ height: … }}` inline, i.e. a brand-new object on each render, so
+ * the memo NEVER bailed out. Result on the menu screens: one re-render (typing a
+ * roster filter keystroke, a toast, a tab switch, a snapshot refresh) re-rendered
+ * every mounted sprite and re-diffed its whole ~117-node rigged SVG — a 30-card
+ * roster means ~3.5k SVG nodes re-diffed per keystroke for zero visual change.
+ * The comparator below compares by VALUE, so a sprite's subtree is left alone
+ * (CSS idle animations keep running uninterrupted) unless something it actually
+ * renders — defId, pose/poseKey, flip, glow, className or a style value — changed.
+ */
+export const Sprite = memo(function Sprite({
+  defId, pose = 'idle', flip, glow, className, style, poseKey = 0,
+}: SpriteProps) {
   const svg = SPRITES[defId];
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -59,7 +89,7 @@ export const Sprite = memo(function Sprite({
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
-});
+}, spriteEqual);
 
 const RUNES = 'ᚠᚢᚦᚱᚷᚹᛈᛉᛏᛒᛖᛗ';
 

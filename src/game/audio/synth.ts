@@ -8,6 +8,16 @@ export type MusicTheme = 'menu' | 'battle' | 'boss' | 'gacha' | 'victory';
 
 type Ctx = AudioContext;
 
+/**
+ * Same-name SFX fired closer than this (seconds) are treated as ONE gameplay
+ * instant and batched into a single trigger. Action event lists (multi-hit,
+ * AoE, burn ticks on several units) run synchronously in one JS task, so all of
+ * them hit `sfx()` at the SAME `ctx.currentTime` — stacking e.g. 5 phase-aligned
+ * `hit` noises is pure clipping + 5× the voices for one audible event. ~2 frames
+ * at 60 Hz keeps genuinely separate player taps (QTE etc.) intact.
+ */
+const SFX_BATCH_WIN = 0.035;
+
 const SCALE: Record<MusicTheme, { root: number; bpm: number; prog: number[][]; arp: number; drums: boolean }> = {
   menu: { root: 57, bpm: 76, prog: [[0, 4, 7, 11], [-3, 2, 5, 9], [-5, 0, 3, 7], [-7, -3, 0, 4]], arp: 0.5, drums: false },
   battle: { root: 45, bpm: 132, prog: [[0, 3, 7, 10], [5, 8, 12, 15], [3, 7, 10, 14], [-2, 3, 5, 10]], arp: 0.25, drums: true },
@@ -27,6 +37,7 @@ export class SynthAudio {
   private step = 0;
   private theme: MusicTheme = 'menu';
   private noiseBuf: AudioBuffer | null = null;
+  private lastSfxAt = new Map<SfxName, number>();
 
   muted = false;
   volume = 0.75;
@@ -91,10 +102,13 @@ export class SynthAudio {
 
   private t0(): number { return this.ctx ? this.ctx.currentTime : 0; }
 
-  private send(node: AudioNode, amount: number) {
-    if (!this.wetBus) return;
+  /** send `node` into the shared reverb; returns the per-send gain so the
+   *  caller can disconnect it (and stop feeding the wet bus) once its source ends */
+  private send(node: AudioNode, amount: number): AudioNode | null {
+    if (!this.wetBus) return null;
     const g = this.ctx!.createGain(); g.gain.value = amount;
     node.connect(g); g.connect(this.wetBus);
+    return g;
   }
 
   private delayNodes(): DelayNode[] { return (this as never as { _delays?: DelayNode[] })._delays ?? []; }
@@ -129,7 +143,15 @@ export class SynthAudio {
     }
     last.connect(g);
     g.connect(o.bus === 'music' ? this.musicBus! : this.sfxBus!);
-    if (o.send) this.send(g, o.send);
+    // Every scheduled sound gets its own gain (+ filter + reverb-send gain). If
+    // we left them connected, each one stays in the pull graph as a silent node
+    // after it stops — a long session (or a busy battle) silently accumulates
+    // hundreds/thousands of dead nodes on the bus and the render thread keeps
+    // stepping them. Batch their teardown on `onended` in one place instead.
+    const cleanup: AudioNode[] = [g];
+    if (o.filter) cleanup.push(last);
+    if (o.send) { const sg = this.send(g, o.send); if (sg) cleanup.push(sg); }
+    osc.onended = () => { for (const n of cleanup) { try { n.disconnect(); } catch { /* ctx closed */ } } };
     osc.start(now); osc.stop(now + dur + 0.05);
   }
 
@@ -152,7 +174,9 @@ export class SynthAudio {
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
     src.connect(f); f.connect(g);
     g.connect(o.bus === 'music' ? this.musicBus! : this.sfxBus!);
-    if (o.send) this.send(g, o.send);
+    const cleanup: AudioNode[] = [f, g];
+    if (o.send) { const sg = this.send(g, o.send); if (sg) cleanup.push(sg); }
+    src.onended = () => { for (const n of cleanup) { try { n.disconnect(); } catch { /* ctx closed */ } } };
     src.start(now); src.stop(now + dur + 0.05);
   }
 
@@ -244,6 +268,13 @@ export class SynthAudio {
     const ctx = this.ensure();
     if (!ctx || this.muted) return;
     const t = ctx.currentTime;
+    // Batch: multiple identical SFX inside one gameplay instant (an AoE hit, a
+    // 4-hit skill, burn ticking on several units — all events are generated
+    // synchronously at the same currentTime) collapse into one trigger instead
+    // of stacking phase-aligned copies of the same sound.
+    const prev = this.lastSfxAt.get(name);
+    if (prev != null && t - prev < SFX_BATCH_WIN) return;
+    this.lastSfxAt.set(name, t);
     switch (name) {
       case 'ui':
         this.tone({ f0: 880, f1: 1180, type: 'triangle', t, dur: 0.06, gain: 0.12 });

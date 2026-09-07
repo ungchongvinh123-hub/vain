@@ -1,4 +1,5 @@
 'use client';
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { Sprite } from './Sprite';
 import { ElementBadge, Icon, ELEMENT_COLORS } from './Icon';
@@ -10,18 +11,56 @@ import { ROLE_META } from '../game/data/constants';
 import { characterCombat } from '../game/systems/stats';
 import { expProgress } from '../game/systems/loadout';
 
-export function PortraitCard({
-  oc, gear, inTeam, onClick, selected, size = 'md', footer, badge,
-}: {
+interface PortraitCardProps {
   oc: OwnedCharacter;
   gear: OwnedGear[];
   inTeam?: boolean;
   onClick?: () => void;
   selected?: boolean;
   size?: 'sm' | 'md' | 'lg';
-  footer?: React.ReactNode;
-  badge?: React.ReactNode;
-}) {
+  /** copy count of this character in the roster — renders a ×N badge when > 1 */
+  dupe?: number;
+}
+
+function sameNumRecord(a: Record<string, number>, b: Record<string, number>): boolean {
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) if (a[k] !== b[k]) return false;
+  return true;
+}
+
+/**
+ * Content comparison for an OwnedCharacter. Menu lists re-render constantly —
+ * every `setSnapshot` (any action anywhere) swaps the whole `snapshot.owned`
+ * array for freshly-parsed objects with IDENTICAL content. Comparing by value
+ * keeps the grid from re-rendering 30 full cards + their sprites for a change
+ * that happened on a completely different screen.
+ */
+function sameOwned(a: OwnedCharacter, b: OwnedCharacter): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.instanceId === b.instanceId && a.charId === b.charId && a.level === b.level
+    && a.exp === b.exp && a.sp === b.sp && a.createdAt === b.createdAt
+    && a.gear.weapon === b.gear.weapon && a.gear.armor === b.gear.armor && a.gear.accessory === b.gear.accessory
+    && sameNumRecord(a.skillLevels, b.skillLevels)
+    && a.loadout.length === b.loadout.length && a.loadout.every((v, i) => v === b.loadout[i]);
+}
+
+function portraitCardEqual(a: PortraitCardProps, b: PortraitCardProps): boolean {
+  return a.size === b.size && a.inTeam === b.inTeam && a.selected === b.selected
+    && a.dupe === b.dupe && a.gear === b.gear && sameOwned(a.oc, b.oc);
+}
+
+/**
+ * Roster/team grid card. Memoised on everything it RENDERS (content-equal oc,
+ * gear reference, flags). `onClick` is deliberately NOT part of the comparison:
+ * it is a per-card navigation closure whose captured values are constant for a
+ * keyed row, and ignoring its identity lets a filter keystroke / snapshot swap
+ * skip all ~30 card renders entirely.
+ */
+export const PortraitCard = memo(function PortraitCard({
+  oc, gear, inTeam, onClick, selected, size = 'md', dupe = 0,
+}: PortraitCardProps) {
   const def = CHAR_MAP[oc.charId];
   if (!def) return null;
   const c = characterCombat(oc, gear);
@@ -43,7 +82,7 @@ export function PortraitCard({
         <div className="absolute left-1.5 top-1.5 flex flex-col gap-1">
           <RarityBadge rarity={def.rarity} size="sm" />
           {inTeam && <span className="rounded bg-emerald-400/90 px-1 text-[8px] font-black text-black">ĐỘI</span>}
-          {badge}
+          {dupe > 1 && <span className="rounded bg-gild/25 px-1 text-[8px] font-black text-amber-100">×{dupe}</span>}
         </div>
         <div className="absolute right-1.5 top-1.5 flex flex-col items-end gap-1">
           <ElementBadge element={def.element} size={18} />
@@ -62,11 +101,10 @@ export function PortraitCard({
           <span className="flex items-center gap-0.5"><Icon name="shield" size={9} color="#60a5fa" />{c.stats.def}</span>
         </div>
         <div className="mt-1"><Bar pct={exp} height={3} color="#a855f7" /></div>
-        {footer}
       </div>
     </motion.button>
   );
-}
+}, portraitCardEqual);
 
 export function gearSummary(oc: OwnedCharacter, gear: OwnedGear[]) {
   return (['weapon', 'armor', 'accessory'] as const).map((slot) => {

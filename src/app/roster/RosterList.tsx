@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Panel, Btn, Chip, SectionTitle, RarityBadge } from '../../components/ui';
+import { Panel, Btn, Chip, SectionTitle } from '../../components/ui';
 import { PortraitCard } from '../../components/PortraitCard';
 import { useGame } from '../../store/game';
 import { CHAR_MAP } from '../../game/data/characters';
@@ -98,11 +98,8 @@ export function RosterList() {
               oc={oc}
               gear={snap.gear}
               inTeam={snap.team.includes(oc.instanceId)}
+              dupe={dupes.get(oc.charId) ?? 1}
               onClick={() => router.push(`/roster?c=${oc.instanceId}`)}
-              badge={(() => {
-                const n = dupes.get(oc.charId) ?? 1;
-                return n > 1 ? <span className="rounded bg-gild/25 px-1 text-[8px] font-black text-amber-100">×{n}</span> : null;
-              })()}
             />
           ))}
           {!list.length && (
