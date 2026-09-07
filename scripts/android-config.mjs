@@ -34,14 +34,19 @@ writeFileSync(manifest, m);
 
 /* -------------------------- 2) themes: fullscreen + bg --------------------- */
 const styles = resolve(resDir, 'values', 'styles.xml');
-if (existsSync(styles)) {
-  let t = readFileSync(styles, 'utf8');
-  if (!t.includes('windowFullscreen')) {
-    t = t.replace('</resources>', `  <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+const LAUNCH_THEME = `<style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
     <item name="android:windowFullscreen">true</item>
     <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     <item name="android:windowBackground">@color/splash_background</item>
-  </style>\n</resources>`);
+  </style>`;
+if (existsSync(styles)) {
+  let t = readFileSync(styles, 'utf8');
+  if (/<style name="AppTheme\.NoActionBarLaunch"[\s\S]*?<\/style>/.test(t)) {
+    // Capacitor's template already defines this style — replace it (never append, or AGP resource merge fails on the duplicate)
+    t = t.replace(/<style name="AppTheme\.NoActionBarLaunch"[\s\S]*?<\/style>/, LAUNCH_THEME);
+    console.log('[android-config] launch theme overridden (fullscreen + cutout)');
+  } else {
+    t = t.replace('</resources>', `  ${LAUNCH_THEME}\n</resources>`);
     console.log('[android-config] immersive fullscreen launch theme added');
   }
   writeFileSync(styles, t);
