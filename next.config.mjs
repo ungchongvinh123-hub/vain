@@ -7,6 +7,8 @@ const APK = process.env.BUILD_MODE === 'apk';
 
 const nextConfig = {
   reactStrictMode: true,
+  // separate dist dir in APK mode so `npm run build:apk-web` never fights a running `npm run dev`
+  distDir: APK ? '.next-apk' : undefined,
   // APK mode = fully static export (no server needed; the IndexedDB local API takes over)
   // web mode = regular build; `next start` serves both pages and the Postgres-backed API.
   output: APK ? 'export' : undefined,
